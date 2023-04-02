@@ -57,7 +57,7 @@ class Graph:
             ax = self.axis,
             font_size=6, 
             node_color='#A0CBE2', 
-            edge_color='#BB0000', 
+            edge_color='#000000', 
             width=0.2,
             node_size=20, 
             with_labels=with_labels,

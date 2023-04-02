@@ -44,7 +44,7 @@ def nauty_normalize(graph):
 
 def filter_non_connected_graphs(graphs: np.ndarray, n: int):
     def laplacian(adj_matrix: np.ndarray):
-        return adj_matrix + np.eye(n)*np.sum(adj_matrix, axis = 1)[:,None]
+        return -adj_matrix + np.eye(n)*np.sum(adj_matrix, axis = 1)[:,None]
     
     def eigenvalues(adj_matrix: np.ndarray):
         laplacian_matrix = laplacian(adj_matrix)
@@ -53,8 +53,21 @@ def filter_non_connected_graphs(graphs: np.ndarray, n: int):
     
     def is_connected(adj_matrix: np.ndarray):
         return eigenvalues(adj_matrix)[1] > 0
+    
+    def is_connected_dfs(adj_matrix: np.ndarray):
 
-    connected_graphs = list(filter(is_connected, graphs))
+        def dfs(graph, visited, node):
+            visited[node] = True
+            for i in range(len(graph)):
+                if graph[node][i] and not visited[i]:
+                    dfs(graph, visited, i)
+
+        n = adj_matrix.shape[0]
+        visited = np.zeros(n, dtype=bool)
+        dfs(adj_matrix, visited, 0)
+        return np.all(visited)
+
+    connected_graphs = list(filter(is_connected_dfs, graphs))
     return connected_graphs
 
 def filter_isomorphic_duplicates(graphs: np.ndarray, n: int):  
@@ -82,7 +95,7 @@ def get_all_unique_graphs(n: int):
     return list(map(lambda unique : IsomorphismGraph(unique, nauty_normalize(unique)), uniques))
 
 if __name__ == "__main__":
-    n = 5
+    n = 6
     graphs = generate_all_possible_undirected_graphs(n)
     connected_graphs = filter_non_connected_graphs(graphs, n)
     unique_graphs = filter_isomorphic_duplicates(connected_graphs, n)
@@ -94,14 +107,14 @@ if __name__ == "__main__":
          [0,0,1,0,1],
          [1,0,0,1,0]])
     search_for_reduced = nauty_normalize(search_for)
-    print(search_for_reduced)
+    # print(search_for_reduced)
     
     def print_stuff(graphs, search_for):
         found = -1
         for i,graph in enumerate(graphs):
             if np.array_equal(graph, search_for):
                 found = i
-            print(graph)
+            #print(graph)
         print(f"Total graphs: {len(graphs)}, found: {found}")
 
     print_stuff(graphs, search_for)

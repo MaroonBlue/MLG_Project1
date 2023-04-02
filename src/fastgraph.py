@@ -74,6 +74,8 @@ class FastGraph:
         self.figure = plt.figure("FastText", figsize=(10,10))
         self.figure.canvas.mpl_connect('key_press_event', self.on_key_press)
         self.figure.canvas.mpl_connect('button_press_event', self.on_mouse_press)
+        self.figure.canvas.mpl_connect('close_event', self.stop_auto_walk)
+
 
         if self.settings.render_isomorphic_graphs:
             div = self.settings.render_x_isomorphisms_per_column
@@ -114,14 +116,15 @@ class FastGraph:
             marker = self.graph.axis.scatter([x], [y], marker='*', color ='r', zorder = 2, s = 64, visible = False)
             self.node_markers[node_id] = [text, marker, edges]
 
-    def start_auto_walk(self):
+    def start_auto_walk(self, event = None):
         self.block_event = Event()
         self.walk_thread = Thread(target=self.drawing_loop, args=[self.block_event])
         self.walk_thread.start()
 
-    def stop_auto_walk(self):
-        self.block_event.set()
-        self.walk_thread.join()
+    def stop_auto_walk(self, event = None):
+        if self.block_event:
+            self.block_event.set()
+            self.walk_thread.join()
 
     def drawing_loop(self, event: Event):
         with open("output.txt", "w") as file:

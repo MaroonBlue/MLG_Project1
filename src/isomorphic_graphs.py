@@ -1,7 +1,9 @@
 import numpy as np
 import oapackage as oa
 
-from src.graph import NumpyGraph
+from typing import List
+
+from src.graph import IsomorphismGraph
 
 def generate_all_possible_undirected_graphs(n: int):
     # The total number of edges in all generated graphs
@@ -23,6 +25,20 @@ def generate_all_possible_undirected_graphs(n: int):
     # Returns a matrix of adjacency matrices
     return graphs
 
+def nauty_normalize(graph):
+
+    def inverse_permutation(perm):
+        inverse = [0] * len(perm)
+        for i, p in enumerate(perm):
+            inverse[p] = i
+        return inverse
+
+    normal_transform = oa.reduceGraphNauty(graph, verbose=0)
+    inverse_transform = inverse_permutation(normal_transform)
+    graph_normalized = oa.transformGraphMatrix(graph, inverse_transform)
+
+    return graph_normalized
+
 def filter_non_connected_and_isomorphic_duplicates(graphs: np.ndarray, n: int):  
 
     def laplacian(adj_matrix: np.ndarray):
@@ -36,23 +52,14 @@ def filter_non_connected_and_isomorphic_duplicates(graphs: np.ndarray, n: int):
     def is_connected(adj_matrix: np.ndarray):
         return eigenvalues(adj_matrix)[1] > 0
 
-    def inverse_permutation(perm):
-        inverse = [0] * len(perm)
-        for i, p in enumerate(perm):
-            inverse[p] = i
-        return inverse
-
     connected_graphs = list(filter(is_connected, graphs))
-    for graph in connected_graphs:
-        print(graph, laplacian(graph), eigenvalues(graph))
+    # for graph in connected_graphs:
+    #     print(graph, laplacian(graph), eigenvalues(graph))
 
     unique_graphs = []
     unique_norms = []
     for graph in connected_graphs:
-        normal_transform = oa.reduceGraphNauty(graph, verbose=0)
-        inverse_transform = inverse_permutation(normal_transform)
-        graph_normalized = oa.transformGraphMatrix(graph, inverse_transform)
-
+        graph_normalized = nauty_normalize(graph)
         unique = True
         for unique_norm in unique_norms:
             if np.array_equal(unique_norm, graph_normalized):
@@ -68,7 +75,7 @@ def get_all_unique_graphs(n: int):
     graphs = generate_all_possible_undirected_graphs(n)
     uniques = filter_non_connected_and_isomorphic_duplicates(graphs, n)
 
-    return list(map(lambda unique : NumpyGraph(unique), uniques))
+    return list(map(lambda unique : IsomorphismGraph(unique, nauty_normalize(unique)), uniques))
 
 if __name__ == "__main__":
     n = 5

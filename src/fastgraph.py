@@ -1,151 +1,187 @@
 import matplotlib.pyplot as plt
-import matplotlib.gridspec as gridspec
-import matplotlib.patches as patch
+from matplotlib.gridspec import GridSpec as GridSpec
+from matplotlib.gridspec import GridSpecFromSubplotSpec as Grid
 
-from threading import Thread
+from numpy import zeros, array_equal
+from threading import Thread, Event
+from string import ascii_lowercase
+from numpy.random import choice
+from random import randint
 from sys import stdout
 from time import sleep
 
 from src.graph import Graph
-from src.isomorphic_graphs import get_all_unique_graphs
-
+from src.isomorphic_graphs import get_all_unique_graphs, nauty_normalize
 
 class FastGraphSettings:
     def __init__(self, 
                  render = False, 
                  render_isomorphic_graphs = False, 
                  render_x_isomorphisms_per_column = 6, 
-                 walk_size = 3) -> None:
-        
+                 subgraph_size = 3) -> None:
+
         self.render = render
         self.render_isomorphic_graphs = render_isomorphic_graphs
         self.render_x_isomorphisms_per_column = render_x_isomorphisms_per_column
-        self.walk_size = walk_size
+        self.subgraph_size = subgraph_size
+
+        def assert_that(condition, message):
+            if not condition:
+                raise AssertionError(message)
+
+        assert_that(subgraph_size >= 2 and subgraph_size <= 6, "Subgraph size should be in range [2,6]")
 
 class FastGraph:  
-    def __init__(self, graph: Graph, settings: FastGraphSettings):
+    def __init__(self, 
+                 graph: Graph, 
+                 settings: FastGraphSettings) -> None:
 
-        self.render = settings.render
-        self.render_iso = settings.render_isomorphic_graphs
         self.graph = graph
-        self.walk_graphs = get_all_unique_graphs(settings.walk_size)
-        self.walk_size = settings.walk_size
-        self.walk_node_ids = []
-        self.walk_points = {}
+        self.settings = settings
+        self.prepare_subgraphs()
 
         if settings.render:
-            figure = plt.figure(figsize=(10,10))
-            figure.canvas.mpl_connect('key_press_event', self.on_key_press)
-            figure.canvas.mpl_connect('button_press_event', self.on_mouse_press)
-
-            grid_spec = gridspec.GridSpec(1, 1)
-            if settings.render_isomorphic_graphs:
-                div = settings.render_x_isomorphisms_per_column
-                n = len(self.walk_graphs) // div + (len(self.walk_graphs) % div > 0)
-                div_n = div + n
-
-                grid = gridspec.GridSpecFromSubplotSpec(div, div_n, subplot_spec = grid_spec[0])
-                axis = plt.subplot(grid[:,:div])
-                for i, walk_graph in enumerate(self.walk_graphs):
-                    sub_axis = plt.subplot(grid[i%div, div+i//div])
-                    walk_graph.render(sub_axis, with_labels=False)
-                    if not i:
-                        sub_axis.set_title("Isomorphisms")
-                        sub_axis.spines['bottom'].set(color = 'green', linewidth = 3)
-                        sub_axis.spines['top'].set(color = 'green', linewidth = 3)
-                        sub_axis.spines['left'].set(color = 'green', linewidth = 3)
-                        sub_axis.spines['right'].set(color = 'green', linewidth = 3)
-                    # else:
-                    #     sub_axis.spines['bottom'].set_color('white')
-                    #     sub_axis.spines['top'].set_color('white')
-                    #     sub_axis.spines['left'].set_color('white')
-                    #     sub_axis.spines['right'].set_color('white')
-                    #     sub_axis.set_title(f"{i + 1}{'st' if i + 1 == 1 else 'nd' if i + 1 == 2 else 'th'} isomorphism")
-                    figure.add_subplot(sub_axis)
-            else:
-                grid = gridspec.GridSpecFromSubplotSpec(1, 1, subplot_spec = grid_spec[0])
-                axis = plt.subplot(grid[:,:])
-
-            axis.set_title('X for step')
-            axis.spines['bottom'].set_color('white')
-            axis.spines['top'].set_color('white')
-            axis.spines['left'].set_color('white')
-            axis.spines['right'].set_color('white')
-            graph.render(axis)
-            figure.add_subplot(axis)
-
-            self.figure = figure
-            self.axis = axis
+            self.prepare_interface()
+            self.prepare_markers()
             plt.show()
 
-    def start_auto_walk(self):
-        t = Thread(target=self.auto_walk_loop)
-        t.start()
+    def prepare_subgraphs(self):
+        self.unique_subgraphs = get_all_unique_graphs(self.settings.subgraph_size)
+        letters = choice([letter for letter in ascii_lowercase], len(self.unique_subgraphs), replace=False)
+        self.subgraph_letter_map = dict(zip(self.unique_subgraphs, letters))
+        self.selected_subgraph_node_ids = self.graph.node_ids[:self.settings.subgraph_size] # TODO - should be connected choice(self.graph.node_ids, self.settings.subgraph_size, replace=False).tolist()
 
-    def auto_walk_loop(self):
-        for i in range(1000):
-            sleep(0.2)
-            self.on_frame_update()
+    def prepare_interface(self):
+        self.figure = plt.figure("FastText", figsize=(10,10))
+        self.figure.canvas.mpl_connect('key_press_event', self.on_key_press)
+        self.figure.canvas.mpl_connect('button_press_event', self.on_mouse_press)
 
-    def on_frame_update(self):
-        if self.walk_node_ids:
-            start = self.walk_node_ids.pop(0)
-            self.walk_node_ids.append((start+self.walk_size) % len(self.graph.node_names))
+        if self.settings.render_isomorphic_graphs:
+            div = self.settings.render_x_isomorphisms_per_column
+            n = len(self.unique_subgraphs) // div + (len(self.unique_subgraphs) % div > 0)
+            grid = Grid(div, div + n, subplot_spec = GridSpec(1, 1)[0])
+            self.graph.axis = plt.subplot(grid[:,:div])
+
+            for i, unique_subgraph in enumerate(self.unique_subgraphs):
+                unique_subgraph.axis = plt.subplot(grid[i%div, div+i//div])
+                unique_subgraph.axis.set_title(self.subgraph_letter_map[unique_subgraph])
+                unique_subgraph.render(with_labels=False)
+                unique_subgraph.hide_border()
+                self.figure.add_subplot(unique_subgraph.axis)
         else:
-            self.walk_node_ids = list(range(self.walk_size))
-        self.draw_walk(self.walk_node_ids)
+            grid = Grid(1, 1, subplot_spec = GridSpec(1, 1)[0])
+            self.graph.axis = plt.subplot(grid[:,:])
+
+        self.graph.render()
+        self.graph.hide_border()
+        self.figure.add_subplot(self.graph.axis)
+
+    def prepare_markers(self):
+        self.node_markers = {}
+        self.highlighted_graph = None
+
+        for node_id in self.graph.node_ids:
+            x, y = self.graph.node_id_position_map[node_id]
+            text = self.graph.axis.text(x, y, "%s" % (node_id), )
+            marker = self.graph.axis.scatter([x], [y], marker='*', c='r', zorder = 2, s = 64)
+            self.node_markers[node_id] = [text, marker]
+
+            node_visible =  node_id in self.selected_subgraph_node_ids
+            text.set_visible(node_visible)
+            marker.set_visible(node_visible)
+
+    def start_auto_walk(self):
+        self.block_event = Event()
+        self.walk_thread = Thread(target=self.drawing_loop, args=[self.block_event])
+        self.walk_thread.start()
+
+    def stop_auto_walk(self):
+        self.block_event.set()
+        self.walk_thread.join()
+
+    def drawing_loop(self, event: Event):
+        while True:
+            sleep(1)
+            self.do_one_random_walk()
+            if event.is_set():
+                break
 
     def on_key_press(self, event):
         stdout.flush()
         if event.key == 'x':
-            self.on_frame_update()
+            self.do_one_random_walk()
         elif event.key == 'c':
             self.start_auto_walk()
+        elif event.key == 'v':
+            self.stop_auto_walk()
 
     def on_mouse_press(self, event):
         return
-        # if event.inaxes:
-        #     clickX = event.xdata
-        #     clickY = event.ydata
-        #     print(dir(event),event.key)
-        #     if self.axis is None or self.axis==event.inaxes:
-        #         annotes = []
-        #         smallest_x_dist = float('inf')
-        #         smallest_y_dist = float('inf')
 
-        #         for x,y,a in self.data:
-        #             if abs(clickX-x)<=smallest_x_dist and abs(clickY-y)<=smallest_y_dist :
-        #                 dx, dy = x - clickX, y - clickY
-        #                 annotes.append((dx*dx+dy*dy,x,y, a) )
-        #                 smallest_x_dist=abs(clickX-x)
-        #                 smallest_y_dist=abs(clickY-y)
+    def do_one_random_walk(self):
+        possible_targets = self.search_for_walk_targets()
+        
+        previous_node_id, new_node_id = possible_targets[randint(0, len(possible_targets) - 1)]
+        self.selected_subgraph_node_ids.remove(previous_node_id)
+        self.selected_subgraph_node_ids.append(new_node_id)
 
-        #         if annotes:
-        #             annotes.sort() # to select the nearest node
-        #             distance, x, y, annote = annotes[0]
-        #             self.drawAnnote(event.inaxes, x, y, annote)
+        graph = self.find_isomorphism()
+        letter = self.subgraph_letter_map[graph] if graph is not None else ''
+        print(letter)
 
-    # def drawAnnote(self, axis, x, y, annote):
-    #     if (x, y) in self.drawnAnnotations:
-    #         markers = self.drawnAnnotations[(x, y)]
-    #         for m in markers:
-    #             m.set_visible(not m.get_visible())
-    #         self.axis.figure.canvas.draw()
-    #     else:
-    #         t = axis.text(x, y, "%s" % (annote), )
-    #         m = axis.scatter([x], [y], marker='d', c='r', zorder=100)
-    #         self.drawnAnnotations[(x, y)] = (t, m)
-    #         self.axis.figure.canvas.draw()
+        if self.settings.render:
+            self.draw_walk(previous_node_id, new_node_id, graph)            
 
-    def draw_walk(self, node_ids):
-        for node_id in self.walk_points.keys():
-            text, marker = self.walk_points[node_id]
-            text.set_visible(False)
-            marker.set_visible(False)
+    def search_for_walk_targets(self):
+        possible_targets = []
+        selected_neighbors_threshold = 2 if self.settings.subgraph_size >= 3 else 1
 
-        for node_id in node_ids:
-            x, y = self.graph.node_name_position_map[node_id]
-            text = self.axis.text(x, y, "%s" % (node_id), )
-            marker = self.axis.scatter([x], [y], marker='*', c='r', zorder=2, s = 36)
-            self.walk_points[node_id] = [text, marker]
-            self.axis.figure.canvas.draw()
+        for selected_node_id in self.selected_subgraph_node_ids:
+            for connected_node_id in self.graph.node_id_edges_map[selected_node_id]:
+                if connected_node_id not in self.selected_subgraph_node_ids:
+                    continue
+                connected_node_neighbors = self.graph.node_id_edges_map[connected_node_id]
+                non_selected_neighbors = list(filter(lambda neighbor:neighbor not in self.selected_subgraph_node_ids, connected_node_neighbors))
+                selected_neighbors_count = len(connected_node_neighbors) - len(non_selected_neighbors)
+
+                if selected_neighbors_count >= selected_neighbors_threshold:
+                    for non_selected_neighbor in non_selected_neighbors:
+                        possible_targets.append((selected_node_id, non_selected_neighbor))
+        return possible_targets
+
+    def find_isomorphism(self):
+        graph = zeros((self.settings.subgraph_size, self.settings.subgraph_size))
+        for i, src_node_id in enumerate(self.selected_subgraph_node_ids):
+            for j, dst_node_id in enumerate(self.selected_subgraph_node_ids):
+                if dst_node_id in self.graph.node_id_edges_map[src_node_id]:
+                    graph[i, j] = 1
+                    graph[j, i] = 1
+
+        norm_graph = nauty_normalize(graph)
+        iso_graph = list(filter(
+            lambda graph_class: 
+                array_equal(graph, graph_class.isomorphisms[0]) or \
+                array_equal(norm_graph, graph_class.isomorphisms[0]) or \
+                array_equal(graph, graph_class.isomorphisms[1]) or \
+                array_equal(norm_graph, graph_class.isomorphisms[1]),
+            self.subgraph_letter_map.keys()))
+        iso_graph = iso_graph[0] if len(iso_graph) else None
+        return iso_graph
+
+    def draw_walk(self, previous_node_id, new_node_id, graph):
+
+        text, marker = self.node_markers[previous_node_id]
+        text.set_visible(False)
+        marker.set_visible(False)
+
+        text, marker = self.node_markers[new_node_id]
+        text.set_visible(True)
+        marker.set_visible(True)
+
+        if self.highlighted_graph is not None:
+            self.highlighted_graph.hide_border()
+        if graph is not None:
+            graph.highlight()
+            self.highlighted_graph = graph
+
+        self.figure.canvas.draw()

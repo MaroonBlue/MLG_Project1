@@ -71,7 +71,18 @@ class FastGraph:
         self.unique_subgraphs = get_all_unique_graphs(self.settings.subgraph_size)
         letters = choice([letter for letter in ascii_letters], len(self.unique_subgraphs), replace=False)
         self.subgraph_letter_map = dict(zip(self.unique_subgraphs, letters))
-        self.selected_subgraph_node_ids = self.graph.node_ids[:self.settings.subgraph_size] # TODO - should be connected choice(self.graph.node_ids, self.settings.subgraph_size, replace=False).tolist()
+
+        starting_node = self.graph.node_ids[randint(0, len(self.graph.node_ids) - 1)]
+        neighbors = list(self.graph.node_id_edges_map[starting_node])
+
+        self.selected_subgraph_node_ids = [starting_node]
+        while len(self.selected_subgraph_node_ids) != self.settings.subgraph_size:
+            neighbor_node = neighbors[randint(0, len(neighbors) - 1)]
+            if neighbor_node not in self.selected_subgraph_node_ids:
+                self.selected_subgraph_node_ids.append(neighbor_node)
+                neighbors.remove(neighbor_node)
+                neighbors.extend(self.graph.node_id_edges_map[neighbor_node])
+                neighbors = list(set(neighbors))
 
     def prepare_interface(self):
         self.figure = plt.figure("FastText", figsize=(10,10))

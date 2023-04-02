@@ -29,17 +29,22 @@ class Graph:
             if source_node_id in node_id_edges_map.keys():
                 node_id_edges_map[source_node_id].add(target_node_id)
             else:
-                node_id_edges_map[source_node_id] = set(target_node_id)
+                node_id_edges_map[source_node_id] = set([target_node_id])
 
             if target_node_id in node_id_edges_map.keys():
                 node_id_edges_map[target_node_id].add(source_node_id)
             else:
-                node_id_edges_map[target_node_id] = set(source_node_id)
+                node_id_edges_map[target_node_id] = set([source_node_id])
 
         if verify_connected:
             for node_id in node_ids:
                 if node_id not in node_id_edges_map.keys():
                     raise AssertionError(f"Graph is not connected! Node without edges: {node_id}")
+
+        for k, vals in node_id_edges_map.items():
+            for v in vals:
+                if k  not in node_id_edges_map[v]:
+                    raise AssertionError("Graph is not undirected!")
 
         self.nx_graph = nx_graph
         self.graph_dict = graph_dict
@@ -79,9 +84,9 @@ class WheelGraph(Graph):
         nx_graph = nx.wheel_graph(nodes_count)
         Graph.__init__(self, nx_graph)
 class DataFrameGraph(Graph):
-    def __init__(self, dataframe, source_column_name = 'from', destination_column_name = 'to'):
+    def __init__(self, dataframe, source_column_name = 'from', destination_column_name = 'to', verify_connected=True):
         nx_graph = nx.from_pandas_edgelist(dataframe, source_column_name, destination_column_name)
-        Graph.__init__(self, nx_graph)
+        Graph.__init__(self, nx_graph, verify_connected)
 class NumpyGraph(Graph):
     def __init__(self, array):
         nx_graph = nx.from_numpy_array(array)

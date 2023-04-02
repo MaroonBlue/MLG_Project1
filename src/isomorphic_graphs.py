@@ -28,8 +28,23 @@ def generate_all_possible_undirected_graphs(n: int):
     # Returns a matrix of adjacency matrices
     return graphs
 
-def nauty_normalize(graph):
+def is_connected(adj_matrix: np.ndarray):
+    def dfs(graph, visited, node):
+        visited[node] = True
+        for i in range(len(graph)):
+            if graph[node][i] and not visited[i]:
+                dfs(graph, visited, i)
 
+    n = adj_matrix.shape[0]
+    visited = np.zeros(n, dtype=bool)
+    dfs(adj_matrix, visited, 0)
+    return np.all(visited)
+
+def filter_non_connected_graphs(graphs: np.ndarray):    
+    connected_graphs = list(filter(is_connected, graphs))
+    return connected_graphs
+
+def nauty_normalize(graph):
     def inverse_permutation(perm):
         inverse = [0] * len(perm)
         for i, p in enumerate(perm):
@@ -42,37 +57,7 @@ def nauty_normalize(graph):
 
     return graph_normalized
 
-def filter_non_connected_graphs(graphs: np.ndarray, n: int):
-    def laplacian(adj_matrix: np.ndarray):
-        return -adj_matrix + np.eye(n)*np.sum(adj_matrix, axis = 1)[:,None]
-    
-    def eigenvalues(adj_matrix: np.ndarray):
-        laplacian_matrix = laplacian(adj_matrix)
-        eigenvalues =  np.linalg.eigvals(laplacian_matrix)
-        return np.sort(eigenvalues)
-    
-    def is_connected(adj_matrix: np.ndarray):
-        return eigenvalues(adj_matrix)[1] > 0
-    
-    def is_connected_dfs(adj_matrix: np.ndarray):
-
-        def dfs(graph, visited, node):
-            visited[node] = True
-            for i in range(len(graph)):
-                if graph[node][i] and not visited[i]:
-                    dfs(graph, visited, i)
-
-        n = adj_matrix.shape[0]
-        visited = np.zeros(n, dtype=bool)
-        dfs(adj_matrix, visited, 0)
-        return np.all(visited)
-
-    connected_graphs = list(filter(is_connected_dfs, graphs))
-    return connected_graphs
-
-def filter_isomorphic_duplicates(graphs: np.ndarray, n: int):  
-
-    # unique_graphs = []
+def filter_isomorphic_duplicates(graphs: np.ndarray):  
     unique_normalized_graphs = []
     for graph in graphs:
         graph_normalized = nauty_normalize(graph)
@@ -82,23 +67,22 @@ def filter_isomorphic_duplicates(graphs: np.ndarray, n: int):
                 unique = False
                 break
         if unique:
-            # unique_graphs.append(graph)
             unique_normalized_graphs.append(graph_normalized)
 
     return unique_normalized_graphs
 
 def get_all_unique_graphs(n: int):
     graphs = generate_all_possible_undirected_graphs(n)
-    connected_graphs = filter_non_connected_graphs(graphs, n)
-    uniques = filter_isomorphic_duplicates(connected_graphs, n)
+    connected_graphs = filter_non_connected_graphs(graphs)
+    uniques = filter_isomorphic_duplicates(connected_graphs)
 
     return list(map(lambda unique : IsomorphismGraph(unique, nauty_normalize(unique)), uniques))
 
 if __name__ == "__main__":
     n = 6
     graphs = generate_all_possible_undirected_graphs(n)
-    connected_graphs = filter_non_connected_graphs(graphs, n)
-    unique_graphs = filter_isomorphic_duplicates(connected_graphs, n)
+    connected_graphs = filter_non_connected_graphs(graphs)
+    unique_graphs = filter_isomorphic_duplicates(connected_graphs)
 
     search_for = np.array(
         [[0,1,0,0,1],

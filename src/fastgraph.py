@@ -2,10 +2,10 @@ import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec as GridSpec
 from matplotlib.gridspec import GridSpecFromSubplotSpec as Grid
 
+from string import ascii_lowercase as ascii_set
 from numpy import zeros, array_equal
 from threading import Thread, Event
 from random import randint, random
-from string import ascii_letters
 from signal import signal, SIGINT
 from numpy.random import choice
 from sys import stdout
@@ -13,7 +13,7 @@ from time import sleep
 from tqdm import tqdm
 
 from src.graph import Graph
-from src.isomorphic_graphs import get_all_unique_graphs, nauty_normalize
+from src.isomorphic_graphs import get_all_unique_graphs, nauty_normalize, is_connected
 
 class FastGraphSettings:
     def __init__(self, 
@@ -69,7 +69,7 @@ class FastGraph:
 
     def prepare_subgraphs(self):
         self.unique_subgraphs = get_all_unique_graphs(self.settings.subgraph_size)
-        letters = choice([letter for letter in ascii_letters], len(self.unique_subgraphs), replace=False)
+        letters = choice([letter for letter in ascii_set], len(self.unique_subgraphs), replace=False)
         self.subgraph_letter_map = dict(zip(self.unique_subgraphs, letters))
 
         starting_node = self.graph.node_ids[randint(0, len(self.graph.node_ids) - 1)]
@@ -156,13 +156,13 @@ class FastGraph:
                     if random() < self.settings.spacebar_probability:
                         sentence += " "
                     if self.settings.render:
+                        self.graph.axis.set_title(sentence)
                         sleep(self.settings.render_auto_walk_delay_seconds)
                     if event.is_set():
                         break
 
                 sentence += self.settings.end_of_sentence_symbol
                 file.write(sentence)
-
                 if event.is_set():
                     break
 
@@ -180,12 +180,16 @@ class FastGraph:
 
     def do_one_random_walk(self):
         possible_targets = self.search_for_walk_targets()
-        
-        previous_node_id, new_node_id = possible_targets[randint(0, len(possible_targets) - 1)]
-        self.selected_subgraph_node_ids.remove(previous_node_id)
-        self.selected_subgraph_node_ids.append(new_node_id)
 
-        graph = self.find_isomorphism()
+        while True:
+            possible_target = possible_targets[randint(0, len(possible_targets) - 1)]
+            previous_node_id, new_node_id = possible_target
+            graph = self.find_isomorphism(previous_node_id, new_node_id)
+            if graph is not None: 
+                break
+            else:
+                possible_targets.remove(possible_target)
+
         letter = self.subgraph_letter_map[graph] if graph is not None else ''
 
         if self.settings.render:
@@ -199,7 +203,7 @@ class FastGraph:
 
         # For every selected node
         for selected_node_id in self.selected_subgraph_node_ids:
-            # Check its neighbors
+            # Check its connected, selected neighbors
             removal_possible = True
             for connected_node_id in self.graph.node_id_edges_map[selected_node_id]:
                 # If the neighbor is selected
@@ -231,10 +235,14 @@ class FastGraph:
 
         return possible_targets
 
-    def find_isomorphism(self):
+    def find_isomorphism(self, previous_node_id, new_node_id):
+        adjusted_subgraph_node_ids = self.selected_subgraph_node_ids.copy()
+        adjusted_subgraph_node_ids.remove(previous_node_id)
+        adjusted_subgraph_node_ids.append(new_node_id)
+        
         graph = zeros((self.settings.subgraph_size, self.settings.subgraph_size))
-        for i, src_node_id in enumerate(self.selected_subgraph_node_ids):
-            for j, dst_node_id in enumerate(self.selected_subgraph_node_ids):
+        for i, src_node_id in enumerate(adjusted_subgraph_node_ids):
+            for j, dst_node_id in enumerate(adjusted_subgraph_node_ids):
                 if dst_node_id in self.graph.node_id_edges_map[src_node_id]:
                     graph[i, j] = 1
                     graph[j, i] = 1
@@ -247,7 +255,11 @@ class FastGraph:
                 array_equal(graph, graph_class.isomorphisms[1]) or \
                 array_equal(norm_graph, graph_class.isomorphisms[1]),
             self.subgraph_letter_map.keys()))
+
         iso_graph = iso_graph[0] if len(iso_graph) else None
+        iso_graph = iso_graph if iso_graph is not None and is_connected(iso_graph.isomorphisms[0]) else None
+        self.selected_subgraph_node_ids = adjusted_subgraph_node_ids if iso_graph is not None else self.selected_subgraph_node_ids
+
         return iso_graph
 
     def draw_initial_walk(self):

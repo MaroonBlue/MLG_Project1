@@ -74,24 +74,20 @@ class Graph:
         self.axis.spines['top'].set(color = 'white', linewidth = 3)
         self.axis.spines['left'].set(color = 'white', linewidth = 3)
         self.axis.spines['right'].set(color = 'white', linewidth = 3)
-
 class WheelGraph(Graph):
     def __init__(self, nodes_count: int):
         nx_graph = nx.wheel_graph(nodes_count)
         Graph.__init__(self, nx_graph)
-
+class DataFrameGraph(Graph):
+    def __init__(self, dataframe, source_column_name = 'from', destination_column_name = 'to'):
+        nx_graph = nx.from_pandas_edgelist(dataframe, source_column_name, destination_column_name)
+        Graph.__init__(self, nx_graph)
 class NumpyGraph(Graph):
     def __init__(self, array):
         nx_graph = nx.from_numpy_array(array)
         Graph.__init__(self, nx_graph)
-
 class IsomorphismGraph(Graph):
     def __init__(self, array, array2):
         self.isomorphisms = [array, array2]
         nx_graph = nx.from_numpy_array(array)
         Graph.__init__(self, nx_graph, verify_connected=False)
-
-class DataFrameGraph(Graph):
-    def __init__(self, dataframe, source_column_name = 'from', destination_column_name = 'to'):
-        nx_graph = nx.from_pandas_edgelist(dataframe, source_column_name, destination_column_name)
-        Graph.__init__(self, nx_graph)

@@ -18,6 +18,7 @@ from src.isomorphic_graphs import get_all_unique_graphs, nauty_normalize
 class FastGraphSettings:
     def __init__(self, 
                  render = False, 
+                 render_auto_walk_delay_seconds = 0.2,
                  render_isomorphic_graphs = False, 
                  render_x_isomorphisms_per_column = 6, 
                  subgraph_size = 3,
@@ -27,6 +28,7 @@ class FastGraphSettings:
                  end_of_sentence_symbol = '\n') -> None:
 
         self.render = render
+        self.render_auto_walk_delay_seconds = render_auto_walk_delay_seconds
         self.render_isomorphic_graphs = render_isomorphic_graphs if render else False
         self.render_x_isomorphisms_per_column = render_x_isomorphisms_per_column
         self.subgraph_size = subgraph_size
@@ -39,6 +41,7 @@ class FastGraphSettings:
             if not condition:
                 raise AssertionError(message)
 
+        assert_that(render_auto_walk_delay_seconds >= 0, "Auto walk delay cannot be a negative number")
         assert_that(subgraph_size >= 2 and subgraph_size <= 6, "Subgraph size should be in range [2,6]")
         assert_that(render_x_isomorphisms_per_column >= 1 and render_x_isomorphisms_per_column <= 6, "Isomorphisms/column should be in range [1,6]")
         assert_that(letters_per_sentence >= 1, "Letters per sentence should be in range [1,+oo)")
@@ -117,14 +120,20 @@ class FastGraph:
             self.node_markers[node_id] = [text, marker, edges]
 
     def start_auto_walk(self, event = None):
-        self.block_event = Event()
-        self.walk_thread = Thread(target=self.drawing_loop, args=[self.block_event])
-        self.walk_thread.start()
+        try:
+            self.block_event
+            if self.block_event.is_set(): raise Exception()
+        except:
+            self.block_event = Event()
+            self.walk_thread = Thread(target=self.drawing_loop, args=[self.block_event])
+            self.walk_thread.start()
 
     def stop_auto_walk(self, event = None):
-        if self.block_event:
+        try:
             self.block_event.set()
             self.walk_thread.join()
+        except:
+            pass
 
     def drawing_loop(self, event: Event):
         with open("output.txt", "w") as file:
@@ -136,7 +145,7 @@ class FastGraph:
                     if random() < self.settings.spacebar_probability:
                         sentence += " "
                     if self.settings.render:
-                        sleep(0.5)
+                        sleep(self.settings.render_auto_walk_delay_seconds)
                     if event.is_set():
                         break
 
@@ -177,17 +186,38 @@ class FastGraph:
         possible_targets = []
         selected_neighbors_threshold = 2 if self.settings.subgraph_size >= 3 else 1
 
+        # For every selected node
         for selected_node_id in self.selected_subgraph_node_ids:
+            # Check its neighbors
+            removal_possible = True
             for connected_node_id in self.graph.node_id_edges_map[selected_node_id]:
+                # If the neighbor is selected
                 if connected_node_id not in self.selected_subgraph_node_ids:
                     continue
+                # Check if the amount of his neighbors is at least 2
                 connected_node_neighbors = self.graph.node_id_edges_map[connected_node_id]
                 non_selected_neighbors = list(filter(lambda neighbor:neighbor not in self.selected_subgraph_node_ids, connected_node_neighbors))
                 selected_neighbors_count = len(connected_node_neighbors) - len(non_selected_neighbors)
 
-                if selected_neighbors_count >= selected_neighbors_threshold:
-                    for non_selected_neighbor in non_selected_neighbors:
-                        possible_targets.append((selected_node_id, non_selected_neighbor))
+                # Then mark the node as removable and add every friendly node for all selected nodes as targets
+                if selected_neighbors_count < selected_neighbors_threshold:
+                    removal_possible = False
+                    break
+            # If all neighbors have at least 2 selected neighbors, removal is possible
+            if removal_possible:
+                # Find all neighbors' neighbors
+                nodes_connected_to_neighbors = list(map(lambda node_id: self.graph.node_id_edges_map[node_id] if node_id != selected_node_id else [], self.selected_subgraph_node_ids))
+                non_selected_unique_targets = set([i for array in nodes_connected_to_neighbors for i in array])
+                
+                # Remove all currently selected ones
+                for node_id in self.selected_subgraph_node_ids:
+                    if node_id in non_selected_unique_targets:
+                        non_selected_unique_targets.remove(node_id)
+                
+                # Add all possibilities to the list
+                for unique_target in non_selected_unique_targets:
+                    possible_targets.append((selected_node_id, unique_target))
+
         return possible_targets
 
     def find_isomorphism(self):

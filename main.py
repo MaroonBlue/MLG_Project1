@@ -1,13 +1,20 @@
 from src.graph import WheelGraph, NumpyGraph, DataFrameGraph
 from src.fastgraph import FastGraph, FastGraphSettings
-from src.mock_graphs import get_mock_wheel_graph, get_mock_dataframe_graph
+from src.mock_graphs import get_mock_wheel_graph, get_mock_fully_connected_graph, get_mock_random_graph
 
-graph = get_mock_wheel_graph(50)
+# graph = get_mock_fully_connected_graph(8)
+graph = get_mock_random_graph(12, 11)
+
 settings = FastGraphSettings(
-    subgraph_size = 5,
-    render = True,
+    render = False, 
     render_isomorphic_graphs = True,
-    render_x_isomorphisms_per_column = 4
+    render_auto_walk_delay_seconds = 0.0001,
+    render_x_isomorphisms_per_column = 6, 
+    subgraph_size = 5,
+    letters_per_sentence = 50,
+    sentences_to_generate = 1000,
+    spacebar_probability = 0.1,
+    end_of_sentence_symbol = '\n'
 )
 
 FastGraph(

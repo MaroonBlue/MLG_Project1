@@ -1,8 +1,9 @@
 import networkx as nx
 import numpy as np
+import matplotlib.axes as plt
 
 class Graph:
-    def __init__(self, nx_graph: nx.graph, node_distance = 0.1, iterations = 10) -> None:
+    def __init__(self, nx_graph: nx.graph, node_distance = 0.1, iterations = 10, verify_connected = True) -> None:
         graph_dict = nx.spring_layout(
             nx_graph, 
             k = node_distance, 
@@ -35,9 +36,14 @@ class Graph:
             else:
                 node_id_edges_map[target_node_id] = set(source_node_id)
 
+        if verify_connected:
+            for node_id in node_ids:
+                if node_id not in node_id_edges_map.keys():
+                    raise AssertionError(f"Graph is not connected! Node without edges: {node_id}")
+
         self.nx_graph = nx_graph
         self.graph_dict = graph_dict
-        self.axis = None
+        self.axis: plt.Axes = None
 
         self.node_ids = node_ids
         self.node_id_edges_map = node_id_edges_map
@@ -79,10 +85,11 @@ class NumpyGraph(Graph):
         nx_graph = nx.from_numpy_array(array)
         Graph.__init__(self, nx_graph)
 
-class IsomorphismGraph(NumpyGraph):
+class IsomorphismGraph(Graph):
     def __init__(self, array, array2):
         self.isomorphisms = [array, array2]
-        NumpyGraph.__init__(self, array)
+        nx_graph = nx.from_numpy_array(array)
+        Graph.__init__(self, nx_graph, verify_connected=False)
 
 class DataFrameGraph(Graph):
     def __init__(self, dataframe, source_column_name = 'from', destination_column_name = 'to'):

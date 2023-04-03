@@ -13,7 +13,13 @@ from time import sleep
 from tqdm import tqdm
 
 from src.graph import Graph
-from src.isomorphic_graphs import get_all_unique_graphs, nauty_normalize, is_connected
+from src.graph_utils import get_all_unique_graphs, nauty_normalize, is_connected
+
+from random import seed as r_seed
+from numpy.random import seed as n_seed
+
+r_seed(69)
+n_seed(69)
 
 class FastGraphSettings:
     def __init__(self, 
@@ -57,6 +63,7 @@ class FastGraph:
         self.graph = graph
         self.settings = settings
         self.prepare_subgraphs()
+        self.choose_random_start_position()
 
         if settings.render:
             self.prepare_interface()
@@ -72,17 +79,22 @@ class FastGraph:
         letters = choice([letter for letter in ascii_set], len(self.unique_subgraphs), replace=False)
         self.subgraph_letter_map = dict(zip(self.unique_subgraphs, letters))
 
+    def choose_random_start_position(self):
         starting_node = self.graph.node_ids[randint(0, len(self.graph.node_ids) - 1)]
         neighbors = list(self.graph.node_id_edges_map[starting_node])
 
         self.selected_subgraph_node_ids = [starting_node]
-        while len(self.selected_subgraph_node_ids) != self.settings.subgraph_size:
-            neighbor_node = neighbors[randint(0, len(neighbors) - 1)]
-            if neighbor_node not in self.selected_subgraph_node_ids:
-                self.selected_subgraph_node_ids.append(neighbor_node)
-                neighbors.remove(neighbor_node)
-                neighbors.extend(self.graph.node_id_edges_map[neighbor_node])
-                neighbors = list(set(neighbors))
+        for i in range(1000): # Try multiple times and reset if no subgraph can be found
+            if len(self.selected_subgraph_node_ids) != self.settings.subgraph_size:
+                neighbor_node = neighbors[randint(0, len(neighbors) - 1)]
+                if neighbor_node not in self.selected_subgraph_node_ids:
+                    self.selected_subgraph_node_ids.append(neighbor_node)
+                    neighbors.remove(neighbor_node)
+                    neighbors.extend(self.graph.node_id_edges_map[neighbor_node])
+                    neighbors = list(set(neighbors))
+            else:
+                return
+        self.choose_random_start_position()
 
     def prepare_interface(self):
         self.figure = plt.figure("FastText", figsize=(10,10))
@@ -136,7 +148,7 @@ class FastGraph:
             if self.block_event.is_set(): raise Exception()
         except:
             self.block_event = Event()
-            self.walk_thread = Thread(target=self.drawing_loop, args=[self.block_event])
+            self.walk_thread = Thread(target=self.walking_loop, args=[self.block_event])
             self.walk_thread.start()
 
     def stop_auto_walk(self, event = None):
@@ -146,10 +158,9 @@ class FastGraph:
         except:
             pass
 
-    def drawing_loop(self, event: Event):
+    def walking_loop(self, event: Event):
         with open("output.txt", "w") as file:
             for sentence_nr in tqdm(range(self.settings.sentences_to_generate)):
-
                 sentence = ""
                 for letter_nr in range(self.settings.letters_per_sentence):
                     sentence += self.do_one_random_walk()
@@ -162,6 +173,9 @@ class FastGraph:
                         break
 
                 sentence += self.settings.end_of_sentence_symbol
+                if self.settings.render:
+                    self.clear_walk()
+                self.choose_random_start_position()
                 file.write(sentence)
                 if event.is_set():
                     break
@@ -174,9 +188,14 @@ class FastGraph:
             self.start_auto_walk()
         elif event.key == 'v':
             self.stop_auto_walk()
+        elif event.key == 'z':
+            self.toggle_rendering()
 
     def on_mouse_press(self, event):
         return
+
+    def toggle_rendering(self):
+        self.settings.render = not self.settings.render
 
     def do_one_random_walk(self):
         possible_targets = self.search_for_walk_targets()
@@ -195,7 +214,11 @@ class FastGraph:
         if self.settings.render:
             self.draw_walk(previous_node_id, new_node_id, graph)
 
-        return letter        
+        return letter 
+
+    def get_node_subgraph_letter(self):
+        graph = self.find_isomorphism_from_node_ids()
+        return self.subgraph_letter_map[graph] if graph is not None else ''
 
     def search_for_walk_targets(self):
         possible_targets = []
@@ -262,6 +285,30 @@ class FastGraph:
 
         return iso_graph
 
+    def find_isomorphism_from_node_ids(self, subgraph_node_ids):
+
+        graph = zeros((self.settings.subgraph_size, self.settings.subgraph_size))
+        for i, src_node_id in enumerate(subgraph_node_ids):
+            for j, dst_node_id in enumerate(subgraph_node_ids):
+                if dst_node_id in self.graph.node_id_edges_map[src_node_id]:
+                    graph[i, j] = 1
+                    graph[j, i] = 1
+
+        norm_graph = nauty_normalize(graph)
+        iso_graph = list(filter(
+            lambda graph_class: 
+                array_equal(graph, graph_class.isomorphisms[0]) or \
+                array_equal(norm_graph, graph_class.isomorphisms[0]) or \
+                array_equal(graph, graph_class.isomorphisms[1]) or \
+                array_equal(norm_graph, graph_class.isomorphisms[1]),
+            self.subgraph_letter_map.keys()))
+
+        iso_graph = iso_graph[0] if len(iso_graph) else None
+        iso_graph = iso_graph if iso_graph is not None and is_connected(iso_graph.isomorphisms[0]) else None
+        self.selected_subgraph_node_ids = subgraph_node_ids if iso_graph is not None else self.selected_subgraph_node_ids
+
+        return iso_graph   
+
     def draw_initial_walk(self):
         for src_node_id in self.selected_subgraph_node_ids:
             text, marker, edges = self.node_markers[src_node_id]
@@ -275,7 +322,6 @@ class FastGraph:
         text, marker, edges = self.node_markers[previous_node_id]
         text.set_visible(False)
         marker.set_visible(False)
-        _, _, edges = self.node_markers[previous_node_id]
         for _, edge in edges:
             edge.set_visible(False)
 
@@ -287,10 +333,23 @@ class FastGraph:
             for target_node_id, edge in edges:
                 edge.set_visible(target_node_id in self.selected_subgraph_node_ids)
 
-        if self.highlighted_graph is not None:
+        if self.highlighted_graph is not None and self.settings.render_isomorphic_graphs:
             self.highlighted_graph.hide_border()
         if graph is not None and self.settings.render_isomorphic_graphs:
             graph.highlight()
             self.highlighted_graph = graph
+
+        self.figure.canvas.draw()
+
+    def clear_walk(self):
+        for node_id in self.selected_subgraph_node_ids:
+            text, marker, edges = self.node_markers[node_id]
+            text.set_visible(False)
+            marker.set_visible(False)
+            for _, edge in edges:
+                edge.set_visible(False)
+
+        if self.highlighted_graph is not None and self.settings.render_isomorphic_graphs:
+            self.highlighted_graph.hide_border()
 
         self.figure.canvas.draw()

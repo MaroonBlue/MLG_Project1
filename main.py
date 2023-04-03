@@ -7,8 +7,8 @@ from src.fastgraph import FastGraph, FastGraphSettings
 graph = get_facebook_dataframe_graph(cut = -1)
 
 settings = FastGraphSettings(
-    render = True, 
-    render_isomorphic_graphs = True,
+    render = False, 
+    render_isomorphic_graphs = False,
     render_auto_walk_delay_seconds = 0.0001,
     render_x_isomorphisms_per_column = 6, 
     subgraph_size = 5,
@@ -20,6 +20,7 @@ settings = FastGraphSettings(
 
 FastGraph(
     graph,
-    settings
+    settings,
+    "facebook_dataframe_graph"
 )
 

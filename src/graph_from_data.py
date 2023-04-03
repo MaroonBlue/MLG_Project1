@@ -24,6 +24,19 @@ def get_facebook_dataframe_graph(cut = None):
             }
         )
         return DataFrameGraph(df)
+    
+def get_facebook_circles_data():
+    with open('data/facebook.circles') as file:
+        data_map = {}
+        lines = file.readlines()
+        circles = len(lines)
+        for line in lines:
+            data = line.replace("\n","").split("\t")
+            circle = int(data[0].replace("circle",""))
+            for node in data[1:]:
+                data_map[node] = circle
+        return sorted(data_map.items(), key=lambda x:int(x[0]))
+
 
 def get_deezer_dataframe_graph(idx:int = None, cut = None):
     with open('data/deezer_edges.json') as file:

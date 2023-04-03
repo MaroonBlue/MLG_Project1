@@ -1,3 +1,5 @@
+import fasttext
+
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec as GridSpec
 from matplotlib.gridspec import GridSpecFromSubplotSpec as Grid

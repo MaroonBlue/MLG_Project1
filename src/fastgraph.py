@@ -9,6 +9,7 @@ from threading import Thread, Event
 from random import randint, random
 from signal import signal, SIGINT
 from numpy.random import choice
+from numpy.linalg import norm
 from sys import stdout
 from time import sleep
 from tqdm import tqdm
@@ -205,9 +206,10 @@ class FastGraph:
 
     def do_one_random_walk(self):
         possible_targets = self.search_for_walk_targets()
+        graph = None
 
-        while True:
-            possible_target = possible_targets[randint(0, len(possible_targets) - 1)]
+        while len(possible_targets):
+            possible_target = possible_targets[randint(0, len(possible_targets) - 1) if len(possible_targets) > 1 else 0]
             previous_node_id, new_node_id = possible_target
             graph = self.find_isomorphism(previous_node_id, new_node_id)
             if graph is not None: 
@@ -362,13 +364,15 @@ class FastGraph:
         self.figure.canvas.draw()
 
     def find_centrality_subgraph(self, node_id, tries = 1000):
-        flag = 0
+        
         for i in range(tries):
             starting_node = node_id
             neighbors = list(self.graph.node_id_edges_map[starting_node])
             subgraph_node_ids = [starting_node]
             while len(subgraph_node_ids) != self.settings.subgraph_size:
                 neighbor_node = neighbors[randint(0, len(neighbors) - 1)]
+                if len(neighbors) + len(subgraph_node_ids) < self.settings.subgraph_size:
+                    break
                 if neighbor_node not in subgraph_node_ids:
                     subgraph_node_ids.append(neighbor_node)
                     neighbors.remove(neighbor_node)
@@ -377,26 +381,56 @@ class FastGraph:
             subgraph = self.graph.nx_graph.subgraph(subgraph_node_ids)
             subgraph_centralities = degree_centrality(subgraph)
             if subgraph_centralities[node_id] == max(subgraph_centralities.values()):
-                    flag = 1
-                    return subgraph
-            
+                return subgraph
+
+        return subgraph
         raise AssertionError("Failed to generate a centrality graph")
     
+    def find_random_subgraph(self, node_id):
+        
+        starting_node = node_id
+        neighbors = list(self.graph.node_id_edges_map[starting_node])
+        subgraph_node_ids = [starting_node]
+        while len(subgraph_node_ids) != self.settings.subgraph_size:
+            neighbor_node = neighbors[randint(0, len(neighbors) - 1)]
+            if len(neighbors) + len(subgraph_node_ids) < self.settings.subgraph_size:
+                break
+            if neighbor_node not in subgraph_node_ids:
+                subgraph_node_ids.append(neighbor_node)
+                neighbors.remove(neighbor_node)
+                neighbors.extend(self.graph.node_id_edges_map[neighbor_node])
+                neighbors = list(set(neighbors))
+        return self.graph.nx_graph.subgraph(subgraph_node_ids)
 
     def fit_model(self):
         self.model = f.train_unsupervised(f"outputs/{self.label}.txt", model='skipgram', minCount = 0)
+        self.create_node_embeddings()
 
     def find_node_embedding(self, node_id):
-        centrality_subgraph = self.find_centrality_subgraph(self, node_id)
+        centrality_subgraph = self.find_centrality_subgraph(node_id)
         letter = self.get_node_subgraph_letter(centrality_subgraph)
         embedding = self.model.get_sentence_vector(letter)
         return embedding
 
-    def node_embeddings(self):
+    def find_node_embedding_v2(self, node_id):
+        sentence = ""
+        for i in range(self.settings.letters_per_sentence):
+            centrality_subgraph = self.find_random_subgraph(node_id)
+            letter = self.get_node_subgraph_letter(centrality_subgraph)
+            sentence += letter
+        embedding = self.model.get_sentence_vector(sentence)
+        return embedding
+    
+    def create_node_embeddings(self):
         node_ids = self.graph.node_ids
-        embedding_values = [self.find_node_embedding(id) for id in self.graph.node_ids]
-        embeddings_dict = dict(map(lambda i,j : (i,j) , node_ids, embedding_values))
-        return embeddings_dict
+        embedding_values = [self.find_node_embedding_v2(id) for id in self.graph.node_ids]
+        self.embeddings_dict = dict(map(lambda i,j : (i,j) , node_ids, embedding_values))
+    
+    def get_nearest_neighbors(self, node_id):
+        node_embedding = self.embeddings_dict[node_id]
+        embedding_items = list(self.embeddings_dict.items())
+        embedding_items = list(map(lambda x:[x[0], norm(x[1] - node_embedding)], embedding_items))
+        return sorted(embedding_items, key = lambda x:x[1])
 
 
         

@@ -1,10 +1,11 @@
 from src.mock_graph import get_mock_wheel_graph, get_mock_fully_connected_graph, get_mock_random_graph
-from src.graph_from_data import get_facebook_dataframe_graph
+from src.graph_from_data import get_facebook_dataframe_graph, get_deezer_dataframe_graph
 from src.fastgraph import FastGraph, FastGraphSettings
 
 # graph = get_mock_fully_connected_graph(8)
 # graph = get_mock_random_graph(12, 12)
-graph = get_facebook_dataframe_graph(cut = -1)
+# graph = get_facebook_dataframe_graph(cut = -1)
+graph = get_deezer_dataframe_graph(0)
 
 settings = FastGraphSettings(
     render = False, 

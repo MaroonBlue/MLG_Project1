@@ -1,8 +1,6 @@
 import numpy as np
 import oapackage as oa
 
-from typing import List
-
 if __name__ == "__main__":
     from graph import IsomorphismGraph
 else:

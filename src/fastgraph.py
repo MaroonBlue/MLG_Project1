@@ -34,7 +34,8 @@ class FastGraphSettings:
                  letters_per_sentence = 25,
                  sentences_to_generate = 1000,
                  spacebar_probability = 0.1,
-                 end_of_sentence_symbol = '\n') -> None:
+                 end_of_sentence_symbol = '\n',
+                 file_name = "output") -> None:
 
         self.render = render
         self.render_auto_walk_delay_seconds = render_auto_walk_delay_seconds
@@ -45,6 +46,7 @@ class FastGraphSettings:
         self.sentences_to_generate = sentences_to_generate
         self.spacebar_probability = spacebar_probability
         self.end_of_sentence_symbol = end_of_sentence_symbol
+        self.label = file_name
 
         def assert_that(condition, message):
             if not condition:
@@ -61,15 +63,13 @@ class FastGraphSettings:
 class FastGraph:  
     def __init__(self, 
                  graph: Graph, 
-                 settings: FastGraphSettings,
-                 label,
-                 model = None) -> None:
+                 settings: FastGraphSettings) -> None:
 
         self.graph = graph
         self.settings = settings
         self.prepare_subgraphs()
         self.choose_random_start_position()
-        self.label = label
+        self.label = settings.label
         self.model = None
 
         if settings.render:
